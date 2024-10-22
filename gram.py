@@ -413,6 +413,7 @@ class TelegramInterface:
             config = Config(config_data)
             self.arbitrage_wrapper = ArbitrageWrapper(config)
             context.job_queue.run_once(self.run_arbitrage, 0, chat_id=update.effective_chat.id)
+            print(False)
             await update.message.reply_text('Arbitrage bot started. You will be notified when trading completes.')
         else:
             await update.message.reply_text('Some configuration data is missing. Please use /set_config to set up your configuration.')
