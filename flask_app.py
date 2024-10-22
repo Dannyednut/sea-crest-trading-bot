@@ -1,10 +1,10 @@
 
 from quart import Quart, request
 from telegram import Update
-from telegram.ext import Application
 import os
 from dotenv import load_dotenv
 from gram import TelegramInterface  # Assuming your script is named telegram_app.py
+import asyncio
 
 app = Quart(__name__)
 
@@ -19,14 +19,13 @@ telegram_interface = TelegramInterface(telegram_token)
 @app.before_serving
 async def startup():
     global telegram_interface
-    telegram_interface = TelegramInterface(telegram_token)
     application = telegram_interface.run()
     await application.initialize()
-    await telegram_interface.setup_webhook(webhook_url)
+    await application.bot.set_webhook(url=f"{webhook_url}/{telegram_token}")
 
 @app.route(f'/{telegram_token}', methods=['POST'])
 async def webhook():
-    update = Update.de_json(request.get_json(force=True), telegram_interface.application.bot)
+    update = Update.de_json(await request.get_json(force=True), telegram_interface.application.bot)
     await telegram_interface.application.process_update(update)
     return 'OK'
 
@@ -43,9 +42,6 @@ def index():
     return 'Telegram Bot is running!'
 
 if __name__ == '__main__':
-    # Set up webhook
-    telegram_interface.setup_webhook(webhook_url)
-
-    # Run the Flask app
+    # Run the Quart app
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
