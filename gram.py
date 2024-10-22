@@ -418,7 +418,9 @@ class TelegramInterface:
             await update.message.reply_text('Some configuration data is missing. Please use /set_config to set up your configuration.')
 
     async def run_arbitrage(self, context: ContextTypes.DEFAULT_TYPE):
+        print(True)
         if self.arbitrage_wrapper:
+            print('yes')
             await context.bot.send_message(
                 chat_id=context.job.chat_id,
                 text="Trading process started. You will receive periodic updates."
