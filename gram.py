@@ -227,7 +227,7 @@ class Arbitrage:
 
     def _calculate_profit(self, base_currency: str) -> float:
         current_balance = self.api_client.get_wallet_balance(base_currency)
-        profit = current_balance - self.initial_balance
+        profit = current_balance - self.api_client.get_wallet_balance('USDT')
         return profit
 
     def run(self):
