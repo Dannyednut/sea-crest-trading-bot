@@ -456,13 +456,6 @@ class TelegramInterface:
         self.application.add_handler(CommandHandler("get_profit", self.get_profit))
         return self.application
     
-    def setup_webhook(self, url):
-        self.application.run_webhook(
-            listen="0.0.0.0",
-            port=int(os.environ.get('PORT',10000)),
-            url_path=self.token,
-            webhook_url=f"{url}/{self.token}"
-        )
 
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('Configuration cancelled.')
