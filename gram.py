@@ -385,16 +385,16 @@ class TelegramInterface:
         else:
             await update.message.reply_text('Some configuration data is missing. Please use /set_config to set up your configuration.')
 
-    async def run_arbitrage(self, context: ContextTypes.DEFAULT_TYPE):
+    async def run_arbitrage(self,update: Update, context: ContextTypes.DEFAULT_TYPE):
         if self.arbitrage_wrapper:
             status, profit = await asyncio.to_thread(self.arbitrage_wrapper.start)
             await context.bot.send_message(
-                chat_id=context.job.chat_id,
+                chat_id=update.effective_chat.id,
                 text=f"{status}\nFinal profit: ${profit:.2f}" if profit is not None else status
             )
         else:
             await context.bot.send_message(
-                chat_id=context.job.chat_id,
+                chat_id=update.effective_chat.id,
                 text="Bot is not configured. Please use /set_config first."
             )
 
