@@ -1,13 +1,7 @@
-import logging
+
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes,ConversationHandler
 import asyncio
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    filename='arbitrage_bot.log'
-)
 
 # config.py
 import json
@@ -106,13 +100,11 @@ import math
 
 class Arbitrage:
     def __init__(self, config: Config, api_client: APIClient):
-        self.logger = logging.getLogger(__name__)
         self.config = config
         self.api_client = api_client
         self.active = True
 
     def execute_trade(self, coin: str) -> float:
-        self.logger.info(f"Executing trade for {coin}")
         usdt_pair = f'{coin}USDT'
         usdc_pair = f'{coin}USDC'
         usdt_price = self.api_client.get_ticker_price(usdt_pair)
@@ -142,7 +134,6 @@ class Arbitrage:
         return math.trunc(max_val * decimal) / decimal
 
     def _trade_usdt_lower(self, coin: str, usdt_pair: str, usdc_pair: str, usdt_price: float, usdc_price: float, initial_usdcusdt: float) -> float:
-        self.logger.info(f"USDT price lower for {coin}. USDT: {usdt_price}, USDC: {usdc_price}")
         spread = usdc_price - usdt_price
         if spread <= self.config.min_spread:
             return 0
@@ -169,7 +160,6 @@ class Arbitrage:
         return self._calculate_profit('USDT')
 
     def _trade_usdc_lower(self, coin: str, usdt_pair: str, usdc_pair: str, usdt_price: float, usdc_price: float, initial_usdcusdt: float) -> float:
-        self.logger.info(f"USDC price lower for {coin}. USDT: {usdt_pair}, USDC: {usdc_price}")
         spread = usdt_price - usdc_price
         if spread <= self.config.min_spread:
             return 0
@@ -241,7 +231,6 @@ class Arbitrage:
         return profit
 
     def run(self):
-        self.logger.info("Starting arbitrage bot")
         start_time = datetime.now()
         end_time = start_time + timedelta(minutes=self.config.duration)
         self.initial_balance = self.api_client.get_wallet_balance('USDT')
@@ -282,7 +271,6 @@ class Arbitrage:
         print(f'Total profit: ${total_profit}')
 
     def stop(self):
-        self.logger.info("Stopping arbitrage bot")
         self.active = False
         return "Stopped"
 
@@ -311,10 +299,8 @@ class ArbitrageWrapper:
             thread.join()
             return "Trading completed", self.get_profit()
         except Exception as e:
-            logging.exception(f"An unexpected error occurred: {e}")
             print(f"An unexpected error occurred: {e}")
         finally:
-            logging.info("Arbitrage bot stopped.")
             print("Arbitrage bot stopped.")
 
 
