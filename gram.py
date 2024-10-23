@@ -412,37 +412,45 @@ class TelegramInterface:
         if all(config_data.values()):
             config = Config(config_data)
             self.arbitrage_wrapper = ArbitrageWrapper(config)
-            print('here')
-            context.job_queue.run_once(self.run_arbitrage, 0, chat_id=update.effective_chat.id)
-            print(False)
+            print('Starting arbitrage process')
+            # Instead of using job_queue, directly call run_arbitrage
+            await self.run_arbitrage(context, update.effective_chat.id)
             await update.message.reply_text('Arbitrage bot started. You will be notified when trading completes.')
         else:
             await update.message.reply_text('Some configuration data is missing. Please use /set_config to set up your configuration.')
 
-    async def run_arbitrage(self, context: ContextTypes.DEFAULT_TYPE):
-        print(True)
+    async def run_arbitrage(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int):
+        print("Entering run_arbitrage")
         if self.arbitrage_wrapper:
-            print('yes')
+            print('Arbitrage wrapper exists')
             await context.bot.send_message(
-                chat_id=context.job.chat_id,
+                chat_id=chat_id,
                 text="Trading process started. You will receive periodic updates."
             )
-            
-            def status_callback(message):
-                asyncio.run(context.bot.send_message(
-                    chat_id=context.job.chat_id,
-                    text=message
-                ))
+            try:
+                def status_callback(message):
+                    async def send_message():
+                        await context.bot.send_message(
+                            chat_id=chat_id,
+                            text=message
+                        )
+                    asyncio.create_task(send_message())
 
-            status, profit = await asyncio.to_thread(
-                self.arbitrage_wrapper.start, 
-                status_callback=status_callback
-            )
-            
-            await context.bot.send_message(
-                chat_id=context.job.chat_id,
-                text=f"{status}\nFinal profit: ${profit:.2f}" if profit is not None else status
-            )
+                status, profit = await asyncio.to_thread(
+                    self.arbitrage_wrapper.start, 
+                    status_callback=status_callback
+                )
+                
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"{status}\nFinal profit: ${profit:.2f}" if profit is not None else status
+                )
+            except Exception as e:
+                print(f"Error in run_arbitrage: {str(e)}")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"Error during trading: {str(e)}"
+                )
         else:
             await context.bot.send_message(
                 chat_id=context.job.chat_id,
