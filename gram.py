@@ -290,8 +290,8 @@ class Arbitrage:
         print(final_message)
         if status_callback:
             status_callback(final_message)
-        return f"Arbitrage: Traded for {minutes} minutes and {seconds} seconds. Total profit: ${total_profit:.2f}"
-
+        msg = (f"Arbitrage: Traded for {minutes} minutes and {seconds} seconds. Total profit: ${total_profit:.2f}")
+        return msg
     def stop(self):
         self.active = False
         return "Stopped"
