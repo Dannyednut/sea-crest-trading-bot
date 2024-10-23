@@ -336,6 +336,8 @@ class TelegramInterface:
         self.application = Application.builder().token(token).build()
         self.arbitrage_wrapper = None
         self.token = token
+        self._lock = asyncio.Lock()  # Use asyncio.Lock instead of threading.Lock
+        self.background_tasks = set()
         # Define conversation states
         self.APIKEY, self.APISECRET, self.COINS, self.AMOUNT, self.STOPLOSS, self.SPREAD, self.DURATION = range(7)
 
@@ -518,21 +520,21 @@ class TelegramInterface:
                 pass
         self.background_tasks.clear()
 
-        def __del__(self):
-            """Destructor to ensure cleanup"""
-            if self.background_tasks:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    loop.create_task(self.__cleanup())
-                else:
-                    try:
-                        loop.run_until_complete(self.__cleanup())
-                    except RuntimeError:
-                        # If the event loop is closed, create a new one
-                        new_loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(new_loop)
-                        new_loop.run_until_complete(self.__cleanup())
-                        new_loop.close()
+    def __del__(self):
+        """Destructor to ensure cleanup"""
+        if self.background_tasks:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(self.__cleanup())
+            else:
+                try:
+                    loop.run_until_complete(self.__cleanup())
+                except RuntimeError:
+                    # If the event loop is closed, create a new one
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    new_loop.run_until_complete(self.__cleanup())
+                    new_loop.close()
     
 
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
