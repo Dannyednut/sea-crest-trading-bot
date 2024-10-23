@@ -312,36 +312,25 @@ class ArbitrageWrapper:
     def start(self, status_callback=None):
         try:
             if status_callback:
-                status_callback("ArbitrageWrapper: Starting trading process...")
-            
-            thread = threading.Thread(target=self.arbitrage.run, args=(status_callback,))
-            thread.start()
-
-            if not self.arbitrage.active:
-                self.arbitrage.stop()
-                if status_callback:
-                    status_callback("ArbitrageWrapper: Trading stopped prematurely.")
-
-            thread.join()
-            profit = self.get_profit()
-            if status_callback:
-                status_callback(f"ArbitrageWrapper: Trading completed. Profit: ${profit:.2f}")
-            return "Trading completed", profit
+                status_callback("Starting trading process...")
+            self.arbitrage.run(status_callback)
+            return "Trading completed", self.get_profit()
         except Exception as e:
             error_message = f"ArbitrageWrapper: An unexpected error occurred: {e}"
-            print(error_message)
-            if status_callback:
-                status_callback(error_message)
-            return error_message, None
-        finally:
-            if status_callback:
-                status_callback("ArbitrageWrapper: Arbitrage bot stopped.")
+            status_callback(error_message)
+            return f"Error: {str(e)}", None
 
     def stop(self):
-        return self.arbitrage.stop()
+        if hasattr(self, 'arbitrage'):
+            self.arbitrage.active = False
+            return "Stop command received"
+        return "Bot not running"
 
     def get_profit(self):
-        return self.arbitrage._calculate_profit('USDT')
+        if hasattr(self, 'arbitrage'):
+            return self.arbitrage._calculate_profit('USDT')
+        return 0.0
+    
 class TelegramInterface:
     def __init__(self, token: str):
         self.application = Application.builder().token(token).build()
@@ -399,49 +388,53 @@ class TelegramInterface:
         return ConversationHandler.END
 
     async def start_bot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        config_data = {
-            'api_key': context.user_data.get('api_key'),
-            'api_secret': context.user_data.get('api_secret'),
-            'coins': context.user_data.get('coins'),
-            'max_amount': context.user_data.get('max_amount'),
-            'stop_loss': context.user_data.get('stop_loss'),
-            'min_spread': context.user_data.get('min_spread'),
-            'duration': context.user_data.get('duration')
-        }
+        async with self._lock:
+            if self.arbitrage_wrapper and hasattr(self.arbitrage_wrapper, 'active') and self.arbitrage_wrapper.arbitrage.active:
+                await update.message.reply_text('Bot is already running!')
+                return
 
-        if all(config_data.values()):
-            config = Config(config_data)
-            self.arbitrage_wrapper = ArbitrageWrapper(config)
-            print('Starting arbitrage process')
-            # Instead of using job_queue, directly call run_arbitrage
-            context.job_queue.run_once(self.run_arbitrage, 0, chat_id=update.effective_chat.id)
-            await update.message.reply_text('Arbitrage bot started. You will be notified when trading completes.')
-        else:
-            await update.message.reply_text('Some configuration data is missing. Please use /set_config to set up your configuration.')
+            config_data = {
+                'api_key': context.user_data.get('api_key'),
+                'api_secret': context.user_data.get('api_secret'),
+                'coins': context.user_data.get('coins'),
+                'max_amount': context.user_data.get('max_amount'),
+                'stop_loss': context.user_data.get('stop_loss'),
+                'min_spread': context.user_data.get('min_spread'),
+                'duration': context.user_data.get('duration')
+            }
 
-    async def run_arbitrage(self, context: ContextTypes.DEFAULT_TYPE, update: Update):
-        chat_id = update.effective_chat.id
-        print("Entering run_arbitrage")
+            if all(config_data.values()):
+                config = Config(config_data)
+                self.arbitrage_wrapper = ArbitrageWrapper(config)
+                # Create and store the background task
+                task = asyncio.create_task(self.run_arbitrage(context, update.effective_chat.id))
+                self.background_tasks.add(task)
+                task.add_done_callback(self.background_tasks.discard)
+                await update.message.reply_text('Arbitrage bot started. You will be notified when trading completes.')
+            else:
+                await update.message.reply_text('Some configuration data is missing. Please use /set_config to set up your configuration.')
+
+    async def run_arbitrage(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int):
         if self.arbitrage_wrapper:
-            print('Arbitrage wrapper exists')
             await context.bot.send_message(
                 chat_id=chat_id,
                 text="Trading process started. You will receive periodic updates."
             )
             try:
-                loop = asyncio.get_event_loop()
-            
                 async def async_callback(message):
                     await context.bot.send_message(
                         chat_id=chat_id,
                         text=message
                     )   
                 def status_callback(message):
-                    loop.create_task(async_callback(message))
+                    asyncio.create_task(async_callback(message))
 
-                status, profit = await asyncio.to_thread(
-                    self.arbitrage_wrapper.start, 
-                    status_callback=status_callback
+                # Run the trading process in a thread pool
+                loop = asyncio.get_event_loop()
+                status, profit = await loop.run_in_executor(
+                    None,
+                    self.arbitrage_wrapper.start,
+                    status_callback
                 )
                 
                 await context.bot.send_message(
@@ -454,36 +447,47 @@ class TelegramInterface:
                     chat_id=chat_id,
                     text=f"Error during trading: {str(e)}"
                 )
-        else:
-            await context.bot.send_message(
-                chat_id=context.job.chat_id,
-                text="Bot is not configured. Please use /set_config first."
-            )
+
 
     async def stop_bot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if self.arbitrage_wrapper:
-            try:
-                result = await asyncio.to_thread(self.arbitrage_wrapper.stop)
-                await update.message.reply_text(f'Arbitrage bot stopped. {result}')
-            except Exception as e:
-
-                await update.message.reply_text(f'Error stopping bot: {str(e)}')
-            return
-        else:
-            await update.message.reply_text('Bot is not running.')
-            return
+        async with self._lock:
+            if self.arbitrage_wrapper:
+                try:
+                    # Stop the arbitrage process
+                    loop = asyncio.get_event_loop()
+                    result = await loop.run_in_executor(None, self.arbitrage_wrapper.stop)
+                    
+                    # Cancel any running background tasks
+                    for task in self.background_tasks:
+                        try:
+                            task.cancel()
+                            await task
+                        except asyncio.CancelledError:
+                            pass
+                    
+                    self.background_tasks.clear()
+                    await update.message.reply_text(f'Arbitrage bot stopped. {result}')
+                except Exception as e:
+                    await update.message.reply_text(f'Error stopping bot: {str(e)}')
+            else:
+                await update.message.reply_text('Bot is not running.')
 
     async def get_profit(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if self.arbitrage_wrapper:
-            profit = self.arbitrage_wrapper.get_profit()
-            await update.message.reply_text(f'Current profit: ${profit:.2f}')
+            try:
+                loop = asyncio.get_event_loop()
+                profit = await loop.run_in_executor(None, self.arbitrage_wrapper.get_profit)
+                await update.message.reply_text(f'Current profit: ${profit:.2f}')
+            except Exception as e:
+                await update.message.reply_text(f'Error getting profit: {str(e)}')
         else:
             await update.message.reply_text('Bot is not configured or running.')
 
     def run(self):
         conv_handler = ConversationHandler(
-            entry_points=[CommandHandler("set_config", self.set_config),
-                          CommandHandler("start_bot", self.request_trade_params)
+            entry_points=[
+                CommandHandler("set_config", self.set_config),
+                CommandHandler("start_bot", self.request_trade_params)
             ],
             states={
                 self.APIKEY: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.get_api_key)],
@@ -499,10 +503,36 @@ class TelegramInterface:
 
         self.application.add_handler(CommandHandler("start", self.start))
         self.application.add_handler(conv_handler)
-
         self.application.add_handler(CommandHandler("stop_bot", self.stop_bot))
         self.application.add_handler(CommandHandler("get_profit", self.get_profit))
+        
         return self.application
+
+    async def __cleanup(self):
+        """Cleanup method to ensure all tasks are properly cancelled"""
+        for task in self.background_tasks:
+            try:
+                task.cancel()
+                await task
+            except asyncio.CancelledError:
+                pass
+        self.background_tasks.clear()
+
+        def __del__(self):
+            """Destructor to ensure cleanup"""
+            if self.background_tasks:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(self.__cleanup())
+                else:
+                    try:
+                        loop.run_until_complete(self.__cleanup())
+                    except RuntimeError:
+                        # If the event loop is closed, create a new one
+                        new_loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(new_loop)
+                        new_loop.run_until_complete(self.__cleanup())
+                        new_loop.close()
     
 
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
