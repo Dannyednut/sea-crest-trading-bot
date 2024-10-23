@@ -414,12 +414,13 @@ class TelegramInterface:
             self.arbitrage_wrapper = ArbitrageWrapper(config)
             print('Starting arbitrage process')
             # Instead of using job_queue, directly call run_arbitrage
-            await self.run_arbitrage(context, update.effective_chat.id)
+            context.job_queue.run_once(self.run_arbitrage, 0, chat_id=update.effective_chat.id)
             await update.message.reply_text('Arbitrage bot started. You will be notified when trading completes.')
         else:
             await update.message.reply_text('Some configuration data is missing. Please use /set_config to set up your configuration.')
 
-    async def run_arbitrage(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int):
+    async def run_arbitrage(self, context: ContextTypes.DEFAULT_TYPE, update: Update):
+        chat_id = update.effective_chat.id
         print("Entering run_arbitrage")
         if self.arbitrage_wrapper:
             print('Arbitrage wrapper exists')
