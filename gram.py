@@ -423,13 +423,14 @@ class TelegramInterface:
                 text="Trading process started. You will receive periodic updates."
             )
             try:
-                async def async_callback(message):
-                    await context.bot.send_message(
+                
+                message = asyncio.Queue()
+                def status_callback(message):
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(context.bot.send_message(
                         chat_id=chat_id,
                         text=message
-                    )   
-                def status_callback(message):
-                    asyncio.create_task(async_callback(message))
+                    ))
 
                 # Run the trading process in a thread pool
                 loop = asyncio.get_event_loop()
