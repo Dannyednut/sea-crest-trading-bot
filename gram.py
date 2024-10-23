@@ -461,10 +461,14 @@ class TelegramInterface:
 
                 # Run the trading process in a thread pool
                 loop = asyncio.get_running_loop()
-                status, profit = await loop.run_in_executor(
+                result = await loop.run_in_executor(
                     None,
                     lambda: self.arbitrage_wrapper.start(status_callback)
                 )
+                if isinstance(result, tuple):
+                    status, profit = result
+                else:
+                    status, profit = "Success!", result
                 
                 # Signal the message processor to stop
                 await message_queue.put("DONE")
