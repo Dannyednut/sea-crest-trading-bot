@@ -290,6 +290,7 @@ class Arbitrage:
         print(final_message)
         if status_callback:
             status_callback(final_message)
+        return f"Arbitrage: Traded for {minutes} minutes and {seconds} seconds. Total profit: ${total_profit:.2f}"
 
     def stop(self):
         self.active = False
@@ -313,8 +314,8 @@ class ArbitrageWrapper:
         try:
             if status_callback:
                 status_callback("Starting trading process...")
-            self.arbitrage.run(status_callback)
-            return "Trading completed", self.get_profit()
+            profit = self.arbitrage.run(status_callback)
+            return profit
         except Exception as e:
             error_message = f"ArbitrageWrapper: An unexpected error occurred: {e}"
             if status_callback:
@@ -324,6 +325,7 @@ class ArbitrageWrapper:
     def stop(self):
         if hasattr(self, 'arbitrage'):
             self.arbitrage.active = False
+            self.arbitrage.stop()
             return "Stop command received"
         return "Bot not running"
 
