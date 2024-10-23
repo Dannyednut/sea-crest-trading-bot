@@ -428,9 +428,17 @@ class TelegramInterface:
                 message_queue = asyncio.Queue()
                 
                 # Create a status callback that puts messages in the queue
+                async def async_callback(message):
+                    await message_queue.put(message)
+
                 def status_callback(message):
-                    loop = asyncio.get_running_loop()
-                    loop.call_soon_threadsafe(message_queue.put_nowait, message)
+                    # Create a new event loop for this thread if necessary
+                    try:
+                        loop = asyncio.get_event_loop()
+                    except RuntimeError:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                    loop.create_task(async_callback(message))
 
                 # Start a task to process messages from the queue
                 async def process_messages():
@@ -472,7 +480,6 @@ class TelegramInterface:
                     chat_id=chat_id,
                     text=f"Error during trading: {str(e)}"
                 )
-                # Make sure to clean up the message processor if it exists
                 if 'message_processor' in locals():
                     await message_queue.put("DONE")
                     await message_processor
