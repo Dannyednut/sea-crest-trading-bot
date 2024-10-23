@@ -477,7 +477,7 @@ class TelegramInterface:
                 # Send final status
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text=f"{status}\nFinal profit: ${profit:.2f}" if profit is not None else status
+                    text= profit if profit is not None else status
                 )
 
             except Exception as e:
