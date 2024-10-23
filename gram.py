@@ -317,7 +317,8 @@ class ArbitrageWrapper:
             return "Trading completed", self.get_profit()
         except Exception as e:
             error_message = f"ArbitrageWrapper: An unexpected error occurred: {e}"
-            status_callback(error_message)
+            if status_callback:
+                status_callback(error_message)
             return f"Error: {str(e)}", None
 
     def stop(self):
@@ -423,34 +424,58 @@ class TelegramInterface:
                 text="Trading process started. You will receive periodic updates."
             )
             try:
+                # Create a message queue for communication between threads
+                message_queue = asyncio.Queue()
                 
-                message = asyncio.Queue()
+                # Create a status callback that puts messages in the queue
                 def status_callback(message):
                     loop = asyncio.get_running_loop()
-                    loop.create_task(context.bot.send_message(
-                        chat_id=chat_id,
-                        text=message
-                    ))
+                    loop.call_soon_threadsafe(message_queue.put_nowait, message)
+
+                # Start a task to process messages from the queue
+                async def process_messages():
+                    while True:
+                        try:
+                            message = await message_queue.get()
+                            if message == "DONE":
+                                break
+                            await context.bot.send_message(
+                                chat_id=chat_id,
+                                text=message
+                            )
+                        except Exception as e:
+                            print(f"Error processing message: {e}")
+
+                # Start the message processing task
+                message_processor = asyncio.create_task(process_messages())
 
                 # Run the trading process in a thread pool
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 status, profit = await loop.run_in_executor(
                     None,
-                    self.arbitrage_wrapper.start,
-                    status_callback
+                    lambda: self.arbitrage_wrapper.start(status_callback)
                 )
                 
+                # Signal the message processor to stop
+                await message_queue.put("DONE")
+                await message_processor
+
+                # Send final status
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=f"{status}\nFinal profit: ${profit:.2f}" if profit is not None else status
                 )
+
             except Exception as e:
                 print(f"Error in run_arbitrage: {str(e)}")
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=f"Error during trading: {str(e)}"
                 )
-
+                # Make sure to clean up the message processor if it exists
+                if 'message_processor' in locals():
+                    await message_queue.put("DONE")
+                    await message_processor
 
     async def stop_bot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         async with self._lock:
