@@ -268,10 +268,10 @@ class Arbitrage:
                         break
 
                 except Exception as e:
-                    print(f"Error occurred: {str(e)}")
-                    print("Check your trading account for active trade and complete manually")
+                    err = (f"Error occurred: {str(e)}")
+                    err+= ("\nCheck your trading account for active trade and complete manually")
                     self.active = False
-                    break
+                    return err
 
             if self.active:
                 print('Sleeping for 2 seconds')
@@ -369,7 +369,7 @@ class TelegramInterface:
         return ConversationHandler.END
 
     async def request_trade_params(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text('How much should I trade with?\nMake sure spot USDT is greater or equal to input:')
+        await update.message.reply_text('How much should I trade with?\nMake sure your spot USDT balance is greater or equal to input:')
         return self.AMOUNT
 
     async def get_amount(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
