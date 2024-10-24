@@ -265,7 +265,7 @@ class Arbitrage:
                     if total_profit < 0 and abs(total_profit) >= self.config.stop_loss:
                         print("Stop loss reached")
                         self.active = False
-                        return "StopLoss Reached. Market not favourable 😭"
+                        break
 
                 except Exception as e:
                     err = (f"Error occurred: {str(e)}")
