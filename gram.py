@@ -268,7 +268,7 @@ class Arbitrage:
                         break
 
                 except Exception as e:
-                    err = (f"Error occurred: {str(e)}")
+                    err = (f"Error occurred: {e}")
                     err+= ("\nCheck your trading account for active trade and complete manually")
                     self.active = False
                     return err
