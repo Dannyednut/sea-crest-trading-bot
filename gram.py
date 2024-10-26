@@ -216,6 +216,9 @@ class Arbitrage:
 
             time.sleep(1)
 
+        verify = self.api_client.get_open_order(pair)
+        if not verify:
+            return position
         # If the order hasn't filled after 20 seconds, cancel and market sell
         self.api_client.cancel_order(pair, order['orderId'])
         return self.api_client.place_order(pair, 'Sell', 'Market', amount)
