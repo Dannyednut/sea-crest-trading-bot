@@ -443,7 +443,7 @@ class TelegramInterface:
                     except RuntimeError:
                         loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(loop)
-                    asyncio.create_task(async_callback(message))
+                    loop.create_task(async_callback(message))
 
                 # Start a task to process messages from the queue
                 async def process_messages():
@@ -551,6 +551,13 @@ class TelegramInterface:
         self.application.add_handler(CommandHandler("get_profit", self.get_profit))
         
         return self.application
+    def setup_webhook(self, url):
+        self.application.run_webhook(
+            listen="0.0.0.0",
+            port=8443,
+            url_path=self.token,
+            webhook_url=f"{url}/{self.token}"
+        )
 
     async def __cleanup(self):
         """Cleanup method to ensure all tasks are properly cancelled"""
