@@ -443,7 +443,7 @@ class TelegramInterface:
                     except RuntimeError:
                         loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(loop)
-                    loop.create_task(async_callback(message))
+                    asyncio.create_task(async_callback(message))
 
                 # Start a task to process messages from the queue
                 async def process_messages():
