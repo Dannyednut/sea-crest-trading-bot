@@ -5,6 +5,10 @@ import os
 from dotenv import load_dotenv
 from gram import TelegramInterface  # Assuming your script is named telegram_app.py
 import asyncio
+import nest_asyncio
+
+# Apply nest_asyncio to allow nested event loops
+nest_asyncio.apply()
 
 app = Quart(__name__)
 

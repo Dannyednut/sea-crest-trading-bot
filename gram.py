@@ -1,13 +1,7 @@
-import logging
+
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes,ConversationHandler
 import asyncio
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    filename='arbitrage_bot.log'
-)
 
 # config.py
 import json
@@ -106,25 +100,27 @@ import math
 
 class Arbitrage:
     def __init__(self, config: Config, api_client: APIClient):
-        self.logger = logging.getLogger(__name__)
         self.config = config
         self.api_client = api_client
         self.active = True
 
     def execute_trade(self, coin: str) -> float:
-        self.logger.info(f"Executing trade for {coin}")
         usdt_pair = f'{coin}USDT'
         usdc_pair = f'{coin}USDC'
         usdt_price = self.api_client.get_ticker_price(usdt_pair)
         usdc_price = self.api_client.get_ticker_price(usdc_pair)
         initial_usdcusdt = self.api_client.get_ticker_price('USDCUSDT')
-
-        if usdt_price < usdc_price:
-            return self._trade_usdt_lower(coin, usdt_pair, usdc_pair, usdt_price, usdc_price, initial_usdcusdt)
-        elif usdc_price < usdt_price:
-            return self._trade_usdc_lower(coin, usdt_pair, usdc_pair, usdt_price, usdc_price, initial_usdcusdt)
-        else:
-            return 0
+        try:
+            if usdt_price < usdc_price:
+                return self._trade_usdt_lower(coin, usdt_pair, usdc_pair, usdt_price, usdc_price, initial_usdcusdt)
+            elif usdc_price < usdt_price:
+                return self._trade_usdc_lower(coin, usdt_pair, usdc_pair, usdt_price, usdc_price, initial_usdcusdt)
+            else:
+                return 0
+        except Exception as e:
+            error_message = f"Arbitrage: Error executing trade for {coin}: {str(e)}"
+            print(error_message)
+            raise APIError()
 
     @staticmethod
     def reverse(inverse: float):
@@ -142,7 +138,6 @@ class Arbitrage:
         return math.trunc(max_val * decimal) / decimal
 
     def _trade_usdt_lower(self, coin: str, usdt_pair: str, usdc_pair: str, usdt_price: float, usdc_price: float, initial_usdcusdt: float) -> float:
-        self.logger.info(f"USDT price lower for {coin}. USDT: {usdt_price}, USDC: {usdc_price}")
         spread = usdc_price - usdt_price
         if spread <= self.config.min_spread:
             return 0
@@ -151,25 +146,30 @@ class Arbitrage:
         trade_amount = min(self.config.max_amount, usdt_balance / usdt_price)
         qty = self.truncate(trade_amount)
 
-        # Buy the coin with USDT
-        self.api_client.place_order(usdt_pair, 'Buy', 'Market', qty)
+        try:
+            # Buy the coin with USDT
+            self.api_client.place_order(usdt_pair, 'Buy', 'Market', qty)
 
-        # Get the bought amount
-        coin_balance = self.api_client.get_wallet_balance(coin)
-        coin_lot = self.api_client.get_lot_size(usdc_pair)
-        coin_balance = self.truncate(coin_balance,coin_lot)
+            # Get the bought amount
+            coin_balance = self.api_client.get_wallet_balance(coin)
+            coin_lot = self.api_client.get_lot_size(usdc_pair)
+            coin_balance = self.truncate(coin_balance,coin_lot)
 
-        # Sell the bought coin to USDC
-        sell_order = self._place_sell_order(usdc_pair, coin_balance, usdc_price)
+            # Sell the bought coin to USDC
+            sell_order = self._place_sell_order(usdc_pair, coin_balance, usdc_price)
 
-        # Convert USDC back to USDT
-        usdc_balance = self.truncate(self.api_client.get_wallet_balance('USDC'))
-        self._convert_usdc_to_usdt(usdc_balance, initial_usdcusdt)
+            # Convert USDC back to USDT
+            usdc_balance = self.truncate(self.api_client.get_wallet_balance('USDC'))
+            self._convert_usdc_to_usdt(usdc_balance, initial_usdcusdt)
 
-        return self._calculate_profit('USDT')
+            return self._calculate_profit('USDT')
+        except Exception as e:
+            error_message = f"Arbitrage: Error in USDC lower trade for {coin}: {str(e)}"
+            print(error_message)
+            raise  APIError()
+
 
     def _trade_usdc_lower(self, coin: str, usdt_pair: str, usdc_pair: str, usdt_price: float, usdc_price: float, initial_usdcusdt: float) -> float:
-        self.logger.info(f"USDC price lower for {coin}. USDT: {usdt_pair}, USDC: {usdc_price}")
         spread = usdt_price - usdc_price
         if spread <= self.config.min_spread:
             return 0
@@ -178,21 +178,27 @@ class Arbitrage:
         trade_amount = min(self.config.max_amount, usdt_balance / usdt_price)
         qty = self.truncate(trade_amount)
 
-        # Buy USDC with USDT
-        self.api_client.place_order('USDCUSDT', 'Buy', 'Market', qty)
+        try:
+            # Buy USDC with USDT
+            self.api_client.place_order('USDCUSDT', 'Buy', 'Market', qty)
 
-        usdc_balance = self.truncate(self.api_client.get_wallet_balance('USDC'))
+            usdc_balance = self.truncate(self.api_client.get_wallet_balance('USDC'))
 
-        # Buy the coin with USDC
-        self.api_client.place_order(usdc_pair, 'Buy', 'Market', usdc_balance)
+            # Buy the coin with USDC
+            self.api_client.place_order(usdc_pair, 'Buy', 'Market', usdc_balance)
 
-        # Get the bought amount
-        coin_balance = self.truncate(self.api_client.get_wallet_balance(coin))
+            # Get the bought amount
+            coin_balance = self.truncate(self.api_client.get_wallet_balance(coin))
 
-        # Sell the bought coin to USDT
-        sell_order = self._place_sell_order(usdt_pair, coin_balance, usdt_price)
+            # Sell the bought coin to USDT
+            sell_order = self._place_sell_order(usdt_pair, coin_balance, usdt_price)
 
-        return self._calculate_profit('USDT')
+            return self._calculate_profit('USDT')
+        except Exception as e:
+            error_message = f"Arbitrage: Error in USDC lower trade for {coin}: {str(e)}"
+            print(error_message)
+            raise  APIError()
+
 
 
     def _place_sell_order(self, pair: str, amount: float, price: float) -> dict:
@@ -210,6 +216,9 @@ class Arbitrage:
 
             time.sleep(1)
 
+        verify = self.api_client.get_open_order(pair)
+        if not verify:
+            return position
         # If the order hasn't filled after 20 seconds, cancel and market sell
         self.api_client.cancel_order(pair, order['orderId'])
         return self.api_client.place_order(pair, 'Sell', 'Market', amount)
@@ -240,8 +249,7 @@ class Arbitrage:
         profit = current_balance - self.initial_balance
         return profit
 
-    def run(self):
-        self.logger.info("Starting arbitrage bot")
+    def run(self, status_callback=None):
         start_time = datetime.now()
         end_time = start_time + timedelta(minutes=self.config.duration)
         self.initial_balance = self.api_client.get_wallet_balance('USDT')
@@ -263,14 +271,14 @@ class Arbitrage:
                         break
 
                 except Exception as e:
-                    print(f"Error occurred: {str(e)}")
-                    print("Check your trading account for active trade and complete manually")
+                    err = (f"Error occurred: {e}")
+                    err+= ("\nCheck your trading account for active trade and complete manually")
                     self.active = False
-                    break
+                    return err
 
             if self.active:
-                print('Sleeping for 5 seconds')
-                for _ in range(5):
+                print('Sleeping for 2 seconds')
+                for _ in range(2):
                     if not self.active:
                         break
                     time.sleep(1)
@@ -281,8 +289,13 @@ class Arbitrage:
         print(f'Traded for {minutes} minutes and {seconds} seconds')
         print(f'Total profit: ${total_profit}')
 
+        final_message = "Arbitrage: Traded for " +str(minutes) +" minutes and " + str(seconds) + " seconds. Total profit: " + str(round(total_profit,2))
+        print(final_message)
+        if status_callback:
+            status_callback(final_message)
+        msg = "BOT: Trading completed in " +str(minutes) +" minutes and " + str(seconds) + " seconds.\nTotal profit: 💲" + str(round(total_profit,2))
+        return msg
     def stop(self):
-        self.logger.info("Stopping arbitrage bot")
         self.active = False
         return "Stopped"
 
@@ -300,40 +313,42 @@ class ArbitrageWrapper:
         self.api_client = APIClient(config.api_key, config.api_secret)
         self.arbitrage = Arbitrage(config, self.api_client)
 
-    def start(self):
+    def start(self, status_callback=None):
         try:
-            thread = threading.Thread(target=self.arbitrage.run)
-            thread.start()
-
-            if self.arbitrage.active == False:
-                self.arbitrage.stop()
-
-            thread.join()
-            return "Trading completed", self.get_profit()
+            if status_callback:
+                status_callback("Starting trading process...")
+            profit = self.arbitrage.run(status_callback)
+            return profit
         except Exception as e:
-            logging.exception(f"An unexpected error occurred: {e}")
-            print(f"An unexpected error occurred: {e}")
-        finally:
-            logging.info("Arbitrage bot stopped.")
-            print("Arbitrage bot stopped.")
-
+            error_message = f"ArbitrageWrapper: An unexpected error occurred: {e}"
+            if status_callback:
+                status_callback(error_message)
+            return f"Error: {str(e)}", None
 
     def stop(self):
-        return self.arbitrage.stop()
+        if hasattr(self, 'arbitrage'):
+            self.arbitrage.active = False
+            self.arbitrage.stop()
+            return "Stop command received"
+        return "Bot not running"
 
     def get_profit(self):
-        return self.arbitrage._calculate_profit('USDT')
-
+        if hasattr(self, 'arbitrage'):
+            return self.arbitrage._calculate_profit('USDT')
+        return 0.0
+    
 class TelegramInterface:
     def __init__(self, token: str):
         self.application = Application.builder().token(token).build()
         self.arbitrage_wrapper = None
         self.token = token
+        self._lock = asyncio.Lock()  # Use asyncio.Lock instead of threading.Lock
+        self.background_tasks = set()
         # Define conversation states
         self.APIKEY, self.APISECRET, self.COINS, self.AMOUNT, self.STOPLOSS, self.SPREAD, self.DURATION = range(7)
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text('Welcome to the Arbitrage Bot! Use /set_config to set your configuration.')
+        await update.message.reply_text('Welcome to the Sea Crest Bot! Use /set_config to set your configuration.')
 
     async def set_config(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('Please enter your API key:')
@@ -348,7 +363,7 @@ class TelegramInterface:
     async def get_api_secret(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['api_secret'] = update.message.text
         await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=update.message.message_id)
-        await update.message.reply_text('API secret saved. Now enter the coins to trade (comma-separated):')
+        await update.message.reply_text('API secret saved. Now enter the coins to trade (comma-separated: BTC,BNB):')
         return self.COINS
 
     async def get_coins(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -357,22 +372,22 @@ class TelegramInterface:
         return ConversationHandler.END
 
     async def request_trade_params(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text('Enter the maximum trade amount:')
+        await update.message.reply_text('How much should I trade with?\nMake sure your spot USDT balance is greater or equal to input:')
         return self.AMOUNT
 
     async def get_amount(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['max_amount'] = float(update.message.text)
-        await update.message.reply_text('Enter the stop loss amount:')
+        await update.message.reply_text('How much are you willing to risk for this trade?\nThis will be set as the stop loss threshold:')
         return self.STOPLOSS
 
     async def get_stoploss(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['stop_loss'] = float(update.message.text)
-        await update.message.reply_text('Enter the minimum spread:')
+        await update.message.reply_text('Enter the minimum spread. 0.002(recommeded):')
         return self.SPREAD
 
     async def get_spread(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['min_spread'] = float(update.message.text)
-        await update.message.reply_text('Enter the trading duration in minutes:')
+        await update.message.reply_text('Enter the trading duration in minutes⏱️:')
         return self.DURATION
 
     async def get_duration(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -381,61 +396,142 @@ class TelegramInterface:
         return ConversationHandler.END
 
     async def start_bot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        config_data = {
-            'api_key': context.user_data.get('api_key'),
-            'api_secret': context.user_data.get('api_secret'),
-            'coins': context.user_data.get('coins'),
-            'max_amount': context.user_data.get('max_amount'),
-            'stop_loss': context.user_data.get('stop_loss'),
-            'min_spread': context.user_data.get('min_spread'),
-            'duration': context.user_data.get('duration')
-        }
+        async with self._lock:
+            if self.arbitrage_wrapper and hasattr(self.arbitrage_wrapper, 'active') and self.arbitrage_wrapper.arbitrage.active:
+                await update.message.reply_text('Bot is already running!')
+                return
 
-        if all(config_data.values()):
-            config = Config(config_data)
-            self.arbitrage_wrapper = ArbitrageWrapper(config)
-            context.job_queue.run_once(self.run_arbitrage, 0, chat_id=update.effective_chat.id)
-            await update.message.reply_text('Arbitrage bot started. You will be notified when trading completes.')
-        else:
-            await update.message.reply_text('Some configuration data is missing. Please use /set_config to set up your configuration.')
+            config_data = {
+                'api_key': context.user_data.get('api_key'),
+                'api_secret': context.user_data.get('api_secret'),
+                'coins': context.user_data.get('coins'),
+                'max_amount': context.user_data.get('max_amount'),
+                'stop_loss': context.user_data.get('stop_loss'),
+                'min_spread': context.user_data.get('min_spread'),
+                'duration': context.user_data.get('duration')
+            }
 
-    async def run_arbitrage(self, context: ContextTypes.DEFAULT_TYPE):
+            if all(config_data.values()):
+                config = Config(config_data)
+                self.arbitrage_wrapper = ArbitrageWrapper(config)
+                # Create and store the background task
+                task = asyncio.create_task(self.run_arbitrage(context, update.effective_chat.id))
+                self.background_tasks.add(task)
+                task.add_done_callback(self.background_tasks.discard)
+                await update.message.reply_text('Trading Instructions noted✍️ ')
+            else:
+                await update.message.reply_text('Some configuration data is missing. Please use /set_config to set up your configuration.')
+
+    async def run_arbitrage(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int):
         if self.arbitrage_wrapper:
-            status, profit = await asyncio.to_thread(self.arbitrage_wrapper.start)
             await context.bot.send_message(
-                chat_id=context.job.chat_id,
-                text=f"{status}\nFinal profit: ${profit:.2f}" if profit is not None else status
+                chat_id=chat_id,
+                text="Trading process started. You will be notified when trading completes."
             )
-        else:
-            await context.bot.send_message(
-                chat_id=context.job.chat_id,
-                text="Bot is not configured. Please use /set_config first."
-            )
+            try:
+                # Create a message queue for communication between threads
+                message_queue = asyncio.Queue()
+                
+                # Create a status callback that puts messages in the queue
+                async def async_callback(message):
+                    await message_queue.put(message)
+
+                def status_callback(message):
+                    # Create a new event loop for this thread if necessary
+                    try:
+                        loop = asyncio.get_event_loop()
+                    except RuntimeError:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                    loop.create_task(async_callback(message))
+
+                # Start a task to process messages from the queue
+                async def process_messages():
+                    while True:
+                        try:
+                            message = await message_queue.get()
+                            if message == "DONE":
+                                break
+                            await context.bot.send_message(
+                                chat_id=chat_id,
+                                text=message
+                            )
+                        except Exception as e:
+                            print(f"Error processing message: {e}")
+
+                # Start the message processing task
+                message_processor = asyncio.create_task(process_messages())
+
+                # Run the trading process in a thread pool
+                loop = asyncio.get_running_loop()
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: self.arbitrage_wrapper.start(status_callback)
+                )
+                if isinstance(result, tuple):
+                    status, profit = result
+                else:
+                    status, profit = "Success!", result
+                
+                # Signal the message processor to stop
+                await message_queue.put("DONE")
+                await message_processor
+
+                # Send final status
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text= profit if profit is not None else status
+                )
+
+            except Exception as e:
+                print(f"Error in run_arbitrage: {str(e)}")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"Error during trading: {str(e)}"
+                )
+                if 'message_processor' in locals():
+                    await message_queue.put("DONE")
+                    await message_processor
 
     async def stop_bot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if self.arbitrage_wrapper:
-            try:
-                result = await asyncio.to_thread(self.arbitrage_wrapper.stop)
-                await update.message.reply_text(f'Arbitrage bot stopped. {result}')
-            except Exception as e:
-
-                await update.message.reply_text(f'Error stopping bot: {str(e)}')
-            return
-        else:
-            await update.message.reply_text('Bot is not running.')
-            return
+        async with self._lock:
+            if self.arbitrage_wrapper:
+                try:
+                    # Stop the arbitrage process
+                    loop = asyncio.get_event_loop()
+                    result = await loop.run_in_executor(None, self.arbitrage_wrapper.stop)
+                    
+                    # Cancel any running background tasks
+                    for task in self.background_tasks:
+                        try:
+                            task.cancel()
+                            await task
+                        except asyncio.CancelledError:
+                            pass
+                    
+                    self.background_tasks.clear()
+                    await update.message.reply_text(f'Trading bot halted🛑. {result}')
+                except Exception as e:
+                    await update.message.reply_text(f'Error stopping bot: {str(e)}')
+            else:
+                await update.message.reply_text('Bot is not running.')
 
     async def get_profit(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if self.arbitrage_wrapper:
-            profit = self.arbitrage_wrapper.get_profit()
-            await update.message.reply_text(f'Current profit: ${profit:.2f}')
+            try:
+                loop = asyncio.get_event_loop()
+                profit = await loop.run_in_executor(None, self.arbitrage_wrapper.get_profit)
+                await update.message.reply_text(f'Current profit: ${profit:.2f}')
+            except Exception as e:
+                await update.message.reply_text(f'Error getting profit: {str(e)}')
         else:
             await update.message.reply_text('Bot is not configured or running.')
 
     def run(self):
         conv_handler = ConversationHandler(
-            entry_points=[CommandHandler("set_config", self.set_config),
-                          CommandHandler("start_bot", self.request_trade_params)
+            entry_points=[
+                CommandHandler("set_config", self.set_config),
+                CommandHandler("start_bot", self.request_trade_params)
             ],
             states={
                 self.APIKEY: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.get_api_key)],
@@ -451,10 +547,36 @@ class TelegramInterface:
 
         self.application.add_handler(CommandHandler("start", self.start))
         self.application.add_handler(conv_handler)
-
         self.application.add_handler(CommandHandler("stop_bot", self.stop_bot))
         self.application.add_handler(CommandHandler("get_profit", self.get_profit))
+        
         return self.application
+
+    async def __cleanup(self):
+        """Cleanup method to ensure all tasks are properly cancelled"""
+        for task in self.background_tasks:
+            try:
+                task.cancel()
+                await task
+            except asyncio.CancelledError:
+                pass
+        self.background_tasks.clear()
+
+    def __del__(self):
+        """Destructor to ensure cleanup"""
+        if self.background_tasks:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(self.__cleanup())
+            else:
+                try:
+                    loop.run_until_complete(self.__cleanup())
+                except RuntimeError:
+                    # If the event loop is closed, create a new one
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    new_loop.run_until_complete(self.__cleanup())
+                    new_loop.close()
     
 
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):

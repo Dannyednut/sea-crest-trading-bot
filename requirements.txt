@@ -19,3 +19,4 @@ quart
 hypercorn
 python-telegram-bot[webhooks]
 python-telegram-bot[job-queue]
+nest_asyncio
