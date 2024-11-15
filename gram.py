@@ -324,7 +324,7 @@ class ArbitrageWrapper:
             if status_callback:
                 status_callback(error_message)
             if "ErrCode: 401" in str(e):
-                return "Error: Invalid Api Key or Secret Key "
+                return "Error: Invalid Api Key or Secret Key!\nUse /cancel to delete your configured keys, then /set_config to set the correct keys."
             return f"Error: {str(e)}", None
 
     def stop(self):
