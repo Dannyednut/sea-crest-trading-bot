@@ -323,6 +323,8 @@ class ArbitrageWrapper:
             error_message = f"ArbitrageWrapper: An unexpected error occurred: {e}"
             if status_callback:
                 status_callback(error_message)
+            if "ErrCode: 401" in str(e):
+                return "Error: Invalid Api Key or Secret Key "
             return f"Error: {str(e)}", None
 
     def stop(self):
