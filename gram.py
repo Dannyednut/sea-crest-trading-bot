@@ -293,7 +293,7 @@ class Arbitrage:
         print(final_message)
         if status_callback:
             status_callback(final_message)
-        msg = "BOT: Trading completed in " +str(minutes) +" minutes and " + str(seconds) + " seconds.\nTotal profit: 💲" + str(round(total_profit,2))
+        msg = "BOT: Trade completed in " +str(minutes) +" minute(s) and " + str(seconds) + " second(s).\nTotal profit: 💲" + str(round(total_profit,2))
         return msg
     def stop(self):
         self.active = False
