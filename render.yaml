@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: telegram-bot
+    name: sea-crest-trading-bot
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: hypercorn flask_app:app

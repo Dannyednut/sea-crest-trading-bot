@@ -43,13 +43,13 @@ The Sea Crest Trading Bot is a Telegram-based arbitrage trading bot that allows 
 2. Open your Telegram app and search for your bot. Start a chat with it
 
 3. Use the command `/set_config` to configure your trading settings:
-    • Enter your API key.
-    • Enter your API secret.
-    • Enter the coins you want to trade (comma-separated).
-    • Enter the maximum amount for trades.
-    • Set your stop-loss threshold.
-    • Set the minimum spread for trades.
-    • Set the trading duration in minutes.
+    - Enter your API key.
+    - Enter your API secret.
+    - Enter the coins you want to trade (comma-separated).
+    - Enter the maximum amount for trades.
+    - Set your stop-loss threshold.
+    - Set the minimum spread for trades.
+    - Set the trading duration in minutes.
 
 4. After configuration, use the command `/start_bot` to begin trading.
 
