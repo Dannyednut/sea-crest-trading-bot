@@ -138,8 +138,9 @@ class Arbitrage:
         return math.trunc(max_val * decimal) / decimal
 
     def _trade_usdt_lower(self, coin: str, usdt_pair: str, usdc_pair: str, usdt_price: float, usdc_price: float, initial_usdcusdt: float) -> float:
-        spread = usdc_price - usdt_price
-        if spread <= self.config.min_spread:
+        diff = usdc_price - usdt_price
+        spread = (diff/usdt_price)*100
+        if spread < self.config.min_spread:
             return 0
 
         usdt_balance = self.api_client.get_wallet_balance('USDT')
@@ -170,8 +171,9 @@ class Arbitrage:
 
 
     def _trade_usdc_lower(self, coin: str, usdt_pair: str, usdc_pair: str, usdt_price: float, usdc_price: float, initial_usdcusdt: float) -> float:
-        spread = usdt_price - usdc_price
-        if spread <= self.config.min_spread:
+        diff = usdt_price - usdc_price
+        spread = (diff/usdc_price)*100
+        if spread < self.config.min_spread:
             return 0
 
         usdt_balance = self.api_client.get_wallet_balance('USDT')
