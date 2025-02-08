@@ -358,6 +358,10 @@ class TelegramInterface:
         await update.message.reply_text('Please enter your API key:')
         return self.APIKEY
 
+    async def set_coins(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text('Please enter the new coins to trade (comma-separated):')
+        return self.COINS
+
     async def get_api_key(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['api_key'] = update.message.text
         await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=update.message.message_id)
@@ -535,7 +539,8 @@ class TelegramInterface:
         conv_handler = ConversationHandler(
             entry_points=[
                 CommandHandler("set_config", self.set_config),
-                CommandHandler("start_bot", self.request_trade_params)
+                CommandHandler("start_bot", self.request_trade_params),
+                CommandHandler("set_coins", self.set_coins),
             ],
             states={
                 self.APIKEY: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.get_api_key)],
