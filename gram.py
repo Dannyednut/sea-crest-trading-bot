@@ -138,8 +138,9 @@ class Arbitrage:
         return math.trunc(max_val * decimal) / decimal
 
     def _trade_usdt_lower(self, coin: str, usdt_pair: str, usdc_pair: str, usdt_price: float, usdc_price: float, initial_usdcusdt: float) -> float:
-        spread = usdc_price - usdt_price
-        if spread <= self.config.min_spread:
+        diff = usdc_price - usdt_price
+        spread = (diff/usdt_price)*100
+        if spread < self.config.min_spread:
             return 0
 
         usdt_balance = self.api_client.get_wallet_balance('USDT')
@@ -170,8 +171,9 @@ class Arbitrage:
 
 
     def _trade_usdc_lower(self, coin: str, usdt_pair: str, usdc_pair: str, usdt_price: float, usdc_price: float, initial_usdcusdt: float) -> float:
-        spread = usdt_price - usdc_price
-        if spread <= self.config.min_spread:
+        diff = usdt_price - usdc_price
+        spread = (diff/usdc_price)*100
+        if spread < self.config.min_spread:
             return 0
 
         usdt_balance = self.api_client.get_wallet_balance('USDT')
@@ -293,7 +295,7 @@ class Arbitrage:
         print(final_message)
         if status_callback:
             status_callback(final_message)
-        msg = "BOT: Trading completed in " +str(minutes) +" minutes and " + str(seconds) + " seconds.\nTotal profit: 💲" + str(round(total_profit,2))
+        msg = "BOT: Trade completed in " +str(minutes) +" minute(s) and " + str(seconds) + " second(s).\nTotal profit: 💲" + str(round(total_profit,2))
         return msg
     def stop(self):
         self.active = False
@@ -323,6 +325,8 @@ class ArbitrageWrapper:
             error_message = f"ArbitrageWrapper: An unexpected error occurred: {e}"
             if status_callback:
                 status_callback(error_message)
+            if "ErrCode: 401" in str(e):
+                return "Error: Invalid Api Key or Secret Key!\nUse /start to restart the bot, then /set_config to set the correct keys."
             return f"Error: {str(e)}", None
 
     def stop(self):
@@ -348,7 +352,7 @@ class TelegramInterface:
         self.APIKEY, self.APISECRET, self.COINS, self.AMOUNT, self.STOPLOSS, self.SPREAD, self.DURATION = range(7)
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text('Welcome to the Sea Crest Bot! Use /set_config to set your configuration.')
+        await update.message.reply_text('Welcome to the Sea Crest Bot! Please use the command /set_config to configure your settings.')
 
     async def set_config(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('Please enter your API key:')
@@ -357,7 +361,7 @@ class TelegramInterface:
     async def get_api_key(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['api_key'] = update.message.text
         await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=update.message.message_id)
-        await update.message.reply_text('API key saved. Now enter your API secret:')
+        await update.message.reply_text('Your API key has been saved. Please enter your API secret now:')
         return self.APISECRET
 
     async def get_api_secret(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -368,26 +372,26 @@ class TelegramInterface:
 
     async def get_coins(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['coins'] = update.message.text.split(',')
-        await update.message.reply_text('Coins saved. Configuration complete. Use /start_bot to begin trading.')
+        await update.message.reply_text('Your selected coins have been saved. Configuration is complete. Please use the command /start_bot to begin trading.')
         return ConversationHandler.END
 
     async def request_trade_params(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text('How much should I trade with?\nMake sure your spot USDT balance is greater or equal to input:')
+        await update.message.reply_text('How much would you like to trade? Please ensure that your spot USDT balance is sufficient for this amount:')
         return self.AMOUNT
 
     async def get_amount(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['max_amount'] = float(update.message.text)
-        await update.message.reply_text('How much are you willing to risk for this trade?\nThis will be set as the stop loss threshold:')
+        await update.message.reply_text('What is the maximum amount you are willing to risk for this trade? This will be set as your stop-loss threshold:')
         return self.STOPLOSS
 
     async def get_stoploss(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['stop_loss'] = float(update.message.text)
-        await update.message.reply_text('Enter the minimum spread. 0.002(recommeded):')
+        await update.message.reply_text('Please enter the minimum spread (recommended: 0.002):')
         return self.SPREAD
 
     async def get_spread(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['min_spread'] = float(update.message.text)
-        await update.message.reply_text('Enter the trading duration in minutes⏱️:')
+        await update.message.reply_text('Please specify the trading duration in minutes ⏱️:')
         return self.DURATION
 
     async def get_duration(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -398,7 +402,7 @@ class TelegramInterface:
     async def start_bot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         async with self._lock:
             if self.arbitrage_wrapper and hasattr(self.arbitrage_wrapper, 'active') and self.arbitrage_wrapper.arbitrage.active:
-                await update.message.reply_text('Bot is already running!')
+                await update.message.reply_text('The bot is currently running!')
                 return
 
             config_data = {
@@ -420,7 +424,7 @@ class TelegramInterface:
                 task.add_done_callback(self.background_tasks.discard)
                 await update.message.reply_text('Trading Instructions noted✍️ ')
             else:
-                await update.message.reply_text('Some configuration data is missing. Please use /set_config to set up your configuration.')
+                await update.message.reply_text('Some configuration data are missing. Please use /set_config to set up your configuration.')
 
     async def run_arbitrage(self, context: ContextTypes.DEFAULT_TYPE, chat_id: int):
         if self.arbitrage_wrapper:
@@ -510,9 +514,9 @@ class TelegramInterface:
                             pass
                     
                     self.background_tasks.clear()
-                    await update.message.reply_text(f'Trading bot halted🛑. {result}')
+                    await update.message.reply_text(f'The trading bot has been halted. 🛑 {result}')
                 except Exception as e:
-                    await update.message.reply_text(f'Error stopping bot: {str(e)}')
+                    await update.message.reply_text(f'An error occurred while attempting to stop the bot: {str(e)}')
             else:
                 await update.message.reply_text('Bot is not running.')
 
@@ -521,7 +525,7 @@ class TelegramInterface:
             try:
                 loop = asyncio.get_event_loop()
                 profit = await loop.run_in_executor(None, self.arbitrage_wrapper.get_profit)
-                await update.message.reply_text(f'Current profit: ${profit:.2f}')
+                await update.message.reply_text(f'Your current profit is: ${profit:.2f}')
             except Exception as e:
                 await update.message.reply_text(f'Error getting profit: {str(e)}')
         else:
