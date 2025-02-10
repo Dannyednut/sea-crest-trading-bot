@@ -25,11 +25,10 @@ import requests
 class APIClient:
     def __init__(self, api_key: str, api_secret: str):
         self.session = pybit.unified_trading.HTTP(
-            demo=True,
             api_key=api_key,
             api_secret=api_secret
         )
-        self.session.url = 'https://demo-api.bybit.com'
+        self.session.url = 'https://api.bybit.com'
 
     def get_wallet_balance(self, coin: str) -> float:
         try:
@@ -165,7 +164,7 @@ class Arbitrage:
 
             return self._calculate_profit('USDT')
         except Exception as e:
-            error_message = f"Arbitrage: Error in USDC lower trade for {coin}: {str(e)}"
+            error_message = f"Arbitrage: Error in USDT lower trade for {coin}: {str(e)}"
             print(error_message)
             raise  APIError()
 
@@ -390,7 +389,7 @@ class TelegramInterface:
 
     async def get_stoploss(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['stop_loss'] = float(update.message.text)
-        await update.message.reply_text('Please enter the minimum spread (recommended: 0.002):')
+        await update.message.reply_text('Please enter the minimum spread (recommended: 0.15):')
         return self.SPREAD
 
     async def get_spread(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
