@@ -203,7 +203,7 @@ class Arbitrage:
 
 
     def _place_sell_order(self, pair: str, amount: float, price: float) -> dict:
-        position = self.api_client.place_order(pair, 'Sell', 'Limit', amount, price)
+        '''position = self.api_client.place_order(pair, 'Sell', 'Limit', amount, price)
 
         for _ in range(20):  # Wait for up to 20 seconds
             order = self.api_client.get_open_order(pair)
@@ -221,7 +221,7 @@ class Arbitrage:
         if not verify:
             return position
         # If the order hasn't filled after 20 seconds, cancel and market sell
-        self.api_client.cancel_order(pair, order['orderId'])
+        self.api_client.cancel_order(pair, order['orderId'])'''
         return self.api_client.place_order(pair, 'Sell', 'Market', amount)
 
     def _convert_usdc_to_usdt(self, usdc_amount: float, initial_usdcusdt: float):
