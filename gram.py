@@ -25,10 +25,11 @@ import requests
 class APIClient:
     def __init__(self, api_key: str, api_secret: str):
         self.session = pybit.unified_trading.HTTP(
+            demo = True,
             api_key=api_key,
             api_secret=api_secret
         )
-        self.session.url = 'https://api.bybit.com'
+        self.session.url = 'https://demo-api.bybit.com'
 
     def get_wallet_balance(self, coin: str) -> float:
         try:
@@ -203,7 +204,7 @@ class Arbitrage:
 
 
     def _place_sell_order(self, pair: str, amount: float, price: float) -> dict:
-        '''position = self.api_client.place_order(pair, 'Sell', 'Limit', amount, price)
+        position = self.api_client.place_order(pair, 'Sell', 'Limit', amount, price)
 
         for _ in range(20):  # Wait for up to 20 seconds
             order = self.api_client.get_open_order(pair)
@@ -221,7 +222,7 @@ class Arbitrage:
         if not verify:
             return position
         # If the order hasn't filled after 20 seconds, cancel and market sell
-        self.api_client.cancel_order(pair, order['orderId'])'''
+        self.api_client.cancel_order(pair, order['orderId'])
         return self.api_client.place_order(pair, 'Sell', 'Market', amount)
 
     def _convert_usdc_to_usdt(self, usdc_amount: float, initial_usdcusdt: float):
